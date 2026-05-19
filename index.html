@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AnomalyVision - (Industrial Defect Detection)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & base ─────────────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:        #0a0a0a;
+  --bg-2:      #111111;
+  --bg-3:      #181818;
+  --bg-4:      #222222;
+  --border:    #2a2a2a;
+  --border-2:  #3a3a3a;
+  --text:      #f0ede8;
+  --text-2:    #8a8580;
+  --text-3:    #555250;
+  --accent:    #e8f55a;
+  --accent-dim:#b8c448;
+  --red:       #ff4545;
+  --green:     #4cff91;
+  --mono:      'Space Mono', monospace;
+  --sans:      'DM Sans', sans-serif;
+  --radius:    4px;
+  --radius-lg: 8px;
+}
+html{font-size:16px;scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--sans);
+  font-weight:300;
+  line-height:1.6;
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── Scanline overlay ─────────────────────────────────────────────────────── */
+body::before{
+  content:'';
+  position:fixed;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);
+  pointer-events:none;z-index:9999;
+}
+
+/* ── Layout ───────────────────────────────────────────────────────────────── */
+.container{max-width:1100px;margin:0 auto;padding:0 24px}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+header{
+  border-bottom:1px solid var(--border);
+  padding:20px 0;
+}
+.header-inner{
+  display:flex;align-items:center;justify-content:space-between;
+}
+.logo{
+  font-family:var(--mono);
+  font-size:13px;
+  letter-spacing:.1em;
+  color:var(--accent);
+  text-transform:uppercase;
+  display:flex;align-items:center;gap:10px;
+}
+.logo-dot{
+  width:8px;height:8px;
+  border-radius:50%;
+  background:var(--accent);
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.header-meta{
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--text-3);
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.status-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--mono);font-size:11px;
+  color:var(--text-2);letter-spacing:.06em;
+  border:1px solid var(--border);
+  padding:4px 10px;border-radius:var(--radius);
+}
+.status-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--text-3);transition:background .3s;
+}
+.status-dot.online{background:var(--green)}
+
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+.hero{padding:64px 0 48px}
+.hero-tag{
+  font-family:var(--mono);font-size:11px;
+  color:var(--accent);letter-spacing:.15em;
+  text-transform:uppercase;margin-bottom:16px;
+}
+.hero-title{
+  font-size:clamp(2.2rem,5vw,3.6rem);
+  font-weight:300;line-height:1.1;
+  color:var(--text);margin-bottom:16px;
+  letter-spacing:-.02em;
+}
+.hero-title em{font-style:normal;color:var(--accent)}
+.hero-sub{
+  font-size:15px;color:var(--text-2);
+  max-width:520px;line-height:1.7;
+}
+
+/* ── Main grid ────────────────────────────────────────────────────────────── */
+.main-grid{
+  display:grid;
+  grid-template-columns:380px 1fr;
+  gap:2px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  overflow:hidden;
+  margin-bottom:40px;
+}
+
+/* ── Panel ────────────────────────────────────────────────────────────────── */
+.panel{background:var(--bg-2)}
+.panel-header{
+  border-bottom:1px solid var(--border);
+  padding:14px 20px;
+  display:flex;align-items:center;gap:8px;
+}
+.panel-label{
+  font-family:var(--mono);font-size:10px;
+  letter-spacing:.12em;text-transform:uppercase;
+  color:var(--text-3);
+}
+.panel-body{padding:24px 20px}
+
+/* ── Upload zone ──────────────────────────────────────────────────────────── */
+.upload-zone{
+  border:1px dashed var(--border-2);
+  border-radius:var(--radius-lg);
+  padding:40px 20px;
+  text-align:center;
+  cursor:pointer;
+  transition:border-color .2s,background .2s;
+  position:relative;overflow:hidden;
+}
+.upload-zone:hover,.upload-zone.drag{
+  border-color:var(--accent);
+  background:rgba(232,245,90,.03);
+}
+.upload-zone input[type=file]{
+  position:absolute;inset:0;opacity:0;cursor:pointer;
+}
+.upload-icon{
+  font-size:32px;margin-bottom:12px;color:var(--text-3);
+}
+.upload-text{font-size:14px;color:var(--text-2);margin-bottom:4px}
+.upload-hint{font-family:var(--mono);font-size:10px;color:var(--text-3);letter-spacing:.06em}
+.preview-img{
+  width:100%;border-radius:var(--radius);
+  display:none;max-height:200px;object-fit:cover;
+}
+
+/* ── Category select ──────────────────────────────────────────────────────── */
+.field-label{
+  font-family:var(--mono);font-size:10px;
+  letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text-3);margin-bottom:8px;display:block;
+}
+.category-grid{
+  display:grid;grid-template-columns:repeat(2,1fr);gap:6px;
+}
+.cat-btn{
+  border:1px solid var(--border);
+  background:var(--bg-3);
+  color:var(--text-2);
+  font-family:var(--mono);font-size:11px;
+  letter-spacing:.06em;text-transform:uppercase;
+  padding:10px 8px;border-radius:var(--radius);
+  cursor:pointer;transition:all .15s;
+  text-align:center;
+}
+.cat-btn:hover{border-color:var(--border-2);color:var(--text);background:var(--bg-4)}
+.cat-btn.active{
+  border-color:var(--accent);
+  color:var(--accent);
+  background:rgba(232,245,90,.06);
+}
+.cat-btn.loading-cat{opacity:.4;pointer-events:none}
+
+/* ── Divider ──────────────────────────────────────────────────────────────── */
+.divider{height:1px;background:var(--border);margin:20px 0}
+
+/* ── Run button ───────────────────────────────────────────────────────────── */
+.run-btn{
+  width:100%;padding:14px;
+  background:var(--accent);color:#0a0a0a;
+  border:none;border-radius:var(--radius);
+  font-family:var(--mono);font-size:12px;
+  font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  cursor:pointer;transition:opacity .2s,transform .1s;
+}
+.run-btn:hover{opacity:.9}
+.run-btn:active{transform:scale(.99)}
+.run-btn:disabled{opacity:.3;cursor:not-allowed}
+.run-btn.running{
+  background:var(--bg-4);color:var(--text-2);
+  border:1px solid var(--border);
+  animation:blink 1s ease-in-out infinite;
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* ── Results panel ────────────────────────────────────────────────────────── */
+.results-panel{
+  background:var(--bg);
+  border-left:1px solid var(--border);
+}
+.results-empty{
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;height:100%;min-height:400px;
+  color:var(--text-3);gap:12px;text-align:center;
+  padding:40px;
+}
+.empty-grid{
+  display:grid;grid-template-columns:repeat(2,80px);
+  grid-template-rows:repeat(2,80px);gap:2px;opacity:.12;
+}
+.empty-cell{background:var(--bg-3)}
+.empty-cell:nth-child(1){background:var(--bg-4)}
+
+/* ── Score display ────────────────────────────────────────────────────────── */
+.score-bar-wrap{
+  background:var(--bg-3);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  padding:20px;margin-bottom:16px;
+}
+.score-top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+.score-number{
+  font-family:var(--mono);font-size:36px;
+  font-weight:700;color:var(--text);
+  transition:color .4s;
+}
+.score-number.anomaly{color:var(--red)}
+.score-number.normal{color:var(--green)}
+.verdict-badge{
+  font-family:var(--mono);font-size:11px;
+  letter-spacing:.08em;text-transform:uppercase;
+  padding:4px 10px;border-radius:var(--radius);
+  border:1px solid;
+}
+.verdict-badge.anomaly{color:var(--red);border-color:var(--red);background:rgba(255,69,69,.08)}
+.verdict-badge.normal{color:var(--green);border-color:var(--green);background:rgba(76,255,145,.08)}
+.score-bar-track{
+  height:4px;background:var(--bg-4);border-radius:2px;overflow:hidden;
+}
+.score-bar-fill{
+  height:100%;border-radius:2px;width:0%;
+  transition:width .8s cubic-bezier(.4,0,.2,1),background .4s;
+}
+.threshold-marker{
+  font-family:var(--mono);font-size:10px;color:var(--text-3);
+  letter-spacing:.06em;margin-top:6px;text-align:right;
+}
+
+/* ── Image trio ───────────────────────────────────────────────────────────── */
+.img-trio{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
+  margin-bottom:16px;
+}
+.img-slot{}
+.img-slot-label{
+  font-family:var(--mono);font-size:9px;
+  letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text-3);margin-bottom:6px;text-align:center;
+}
+.img-slot img{
+  width:100%;border-radius:var(--radius);
+  border:1px solid var(--border);
+  display:block;
+}
+
+/* ── Meta row ─────────────────────────────────────────────────────────────── */
+.meta-row{
+  display:flex;gap:12px;flex-wrap:wrap;
+}
+.meta-pill{
+  display:flex;align-items:center;gap:6px;
+  background:var(--bg-3);border:1px solid var(--border);
+  border-radius:var(--radius);padding:6px 12px;
+  font-family:var(--mono);font-size:10px;
+  letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text-2);
+}
+.meta-pill strong{color:var(--text)}
+
+/* ── Error ────────────────────────────────────────────────────────────────── */
+.error-box{
+  background:rgba(255,69,69,.06);
+  border:1px solid rgba(255,69,69,.3);
+  border-radius:var(--radius);
+  padding:14px 16px;
+  font-family:var(--mono);font-size:12px;
+  color:var(--red);margin-bottom:16px;
+}
+
+/* ── Footer ───────────────────────────────────────────────────────────────── */
+footer{
+  border-top:1px solid var(--border);
+  padding:20px 0;margin-top:40px;
+}
+.footer-inner{
+  display:flex;align-items:center;justify-content:space-between;
+  font-family:var(--mono);font-size:10px;color:var(--text-3);
+  letter-spacing:.08em;text-transform:uppercase;
+}
+.footer-links{display:flex;gap:20px}
+.footer-links a{
+  color:var(--text-3);text-decoration:none;
+  transition:color .2s;
+}
+.footer-links a:hover{color:var(--text-2)}
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media(max-width:720px){
+  .main-grid{grid-template-columns:1fr}
+  .results-panel{border-left:none;border-top:1px solid var(--border)}
+  .hero-title{font-size:2rem}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-dot"></div>
+        AnomalyVision
+      </div>
+      <div style="display:flex;align-items:center;gap:16px">
+        <div class="status-badge">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">Checking API...</span>
+        </div>
+        <div class="header-meta">PatchCore · EfficientNet-B4</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="container">
+
+    <section class="hero">
+      <div class="hero-tag">Computer Vision · Unsupervised Anomaly Detection</div>
+      <h1 class="hero-title">Detect defects.<br><em>No labels needed.</em></h1>
+      <p class="hero-sub">PatchCore learns what a normal part looks like, then flags anything that deviates — locating the exact defect region with a pixel-level heatmap.</p>
+    </section>
+
+    <div class="main-grid">
+
+      <!-- Left: controls -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-label">01 — Input</div>
+        </div>
+        <div class="panel-body">
+
+          <!-- Upload -->
+          <label class="field-label">Image</label>
+          <div class="upload-zone" id="dropZone">
+            <input type="file" id="fileInput" accept="image/*">
+            <div id="uploadContent">
+              <div class="upload-icon">⊕</div>
+              <div class="upload-text">Drop image or click to browse</div>
+              <div class="upload-hint">JPG · PNG · WEBP</div>
+            </div>
+            <img id="preview" class="preview-img" alt="preview">
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- Category -->
+          <label class="field-label">Category</label>
+          <div class="category-grid" id="categoryGrid">
+            <!-- filled by JS -->
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- Run -->
+          <button class="run-btn" id="runBtn" disabled>
+            Run Detection
+          </button>
+
+        </div>
+      </div>
+
+      <!-- Right: results -->
+      <div class="panel results-panel">
+        <div class="panel-header">
+          <div class="panel-label">02 — Results</div>
+        </div>
+        <div class="panel-body" id="resultsBody">
+
+          <!-- Empty state -->
+          <div class="results-empty" id="emptyState">
+            <div class="empty-grid">
+              <div class="empty-cell"></div><div class="empty-cell"></div>
+              <div class="empty-cell"></div><div class="empty-cell"></div>
+            </div>
+            <p style="font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase">
+              Upload an image and select a category
+            </p>
+          </div>
+
+          <!-- Results (hidden until predict) -->
+          <div id="resultsContent" style="display:none">
+
+            <!-- Score bar -->
+            <div class="score-bar-wrap">
+              <div class="score-top">
+                <span class="score-number" id="scoreNumber">—</span>
+                <span class="verdict-badge" id="verdictBadge">—</span>
+              </div>
+              <div class="score-bar-track">
+                <div class="score-bar-fill" id="scoreBarFill"></div>
+              </div>
+              <div class="threshold-marker" id="thresholdText"></div>
+            </div>
+
+            <!-- Error -->
+            <div class="error-box" id="errorBox" style="display:none"></div>
+
+            <!-- Image trio -->
+            <div class="img-trio">
+              <div class="img-slot">
+                <div class="img-slot-label">Original</div>
+                <img id="imgOriginal" src="" alt="original">
+              </div>
+              <div class="img-slot">
+                <div class="img-slot-label">Heatmap</div>
+                <img id="imgHeatmap" src="" alt="heatmap">
+              </div>
+              <div class="img-slot">
+                <div class="img-slot-label">Overlay</div>
+                <img id="imgOverlay" src="" alt="overlay">
+              </div>
+            </div>
+
+            <!-- Meta -->
+            <div class="meta-row" id="metaRow"></div>
+
+          </div>
+        </div>
+      </div>
+    </div><!-- /main-grid -->
+
+  </div><!-- /container -->
+</main>
+
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <span>Yacine Bouzerara</span>
+      <div class="footer-links">
+        <a href="https://github.com/YacineBZDZ" target="_blank">GitHub</a>
+        <a href="https://yacinebouzerara.dev" target="_blank">Portfolio</a>
+        <a href="https://arxiv.org/abs/2106.08265" target="_blank">Paper</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ── Config ─────────────────────────────────────────────────────────────────
+// Replace this with your Render URL once deployed
+const API_URL = "https://pathcoreapi.onrender.com";
+
+// ── State ──────────────────────────────────────────────────────────────────
+let selectedCategory = null;
+let selectedFile     = null;
+
+// ── Elements ───────────────────────────────────────────────────────────────
+const statusDot    = document.getElementById("statusDot");
+const statusText   = document.getElementById("statusText");
+const dropZone     = document.getElementById("dropZone");
+const fileInput    = document.getElementById("fileInput");
+const uploadContent= document.getElementById("uploadContent");
+const preview      = document.getElementById("preview");
+const categoryGrid = document.getElementById("categoryGrid");
+const runBtn       = document.getElementById("runBtn");
+const emptyState   = document.getElementById("emptyState");
+const resultsContent=document.getElementById("resultsContent");
+const scoreNumber  = document.getElementById("scoreNumber");
+const verdictBadge = document.getElementById("verdictBadge");
+const scoreBarFill = document.getElementById("scoreBarFill");
+const thresholdText= document.getElementById("thresholdText");
+const imgOriginal  = document.getElementById("imgOriginal");
+const imgHeatmap   = document.getElementById("imgHeatmap");
+const imgOverlay   = document.getElementById("imgOverlay");
+const metaRow      = document.getElementById("metaRow");
+const errorBox     = document.getElementById("errorBox");
+
+// ── Health check + load categories ─────────────────────────────────────────
+async function init() {
+  try {
+    const res  = await fetch(`${API_URL}/`);
+    const data = await res.json();
+    statusDot.classList.add("online");
+    statusText.textContent = "API online";
+    buildCategoryGrid(data.categories_loaded);
+  } catch (e) {
+    statusText.textContent = "API offline";
+    categoryGrid.innerHTML = `<p style="font-family:var(--mono);font-size:11px;color:var(--red);grid-column:span 2">
+      Cannot reach API. Check your Render URL.
+    </p>`;
+  }
+}
+
+function buildCategoryGrid(categories) {
+  categoryGrid.innerHTML = "";
+  categories.forEach(cat => {
+    const btn = document.createElement("button");
+    btn.className = "cat-btn";
+    btn.textContent = cat;
+    btn.dataset.cat = cat;
+    btn.addEventListener("click", () => selectCategory(cat));
+    categoryGrid.appendChild(btn);
+  });
+}
+
+function selectCategory(cat) {
+  selectedCategory = cat;
+  document.querySelectorAll(".cat-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.cat === cat);
+  });
+  updateRunBtn();
+}
+
+// ── File handling ──────────────────────────────────────────────────────────
+fileInput.addEventListener("change", e => {
+  handleFile(e.target.files[0]);
+});
+
+dropZone.addEventListener("dragover", e => {
+  e.preventDefault(); dropZone.classList.add("drag");
+});
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag"));
+dropZone.addEventListener("drop", e => {
+  e.preventDefault(); dropZone.classList.remove("drag");
+  handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  selectedFile = file;
+  const url = URL.createObjectURL(file);
+  preview.src = url;
+  preview.style.display = "block";
+  uploadContent.style.display = "none";
+  updateRunBtn();
+}
+
+function updateRunBtn() {
+  runBtn.disabled = !(selectedFile && selectedCategory);
+}
+
+// ── Predict ────────────────────────────────────────────────────────────────
+runBtn.addEventListener("click", async () => {
+  if (!selectedFile || !selectedCategory) return;
+
+  // UI loading state
+  runBtn.disabled = true;
+  runBtn.classList.add("running");
+  runBtn.textContent = "Running inference...";
+  emptyState.style.display    = "none";
+  resultsContent.style.display = "none";
+  errorBox.style.display       = "none";
+
+  try {
+    const form = new FormData();
+    form.append("file", selectedFile);
+    form.append("category", selectedCategory);
+
+    const res  = await fetch(`${API_URL}/predict`, { method: "POST", body: form });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    renderResults(data);
+
+  } catch (err) {
+    errorBox.textContent = `Error: ${err.message}`;
+    errorBox.style.display = "block";
+    resultsContent.style.display = "block";
+    emptyState.style.display     = "none";
+
+  } finally {
+    runBtn.classList.remove("running");
+    runBtn.disabled = false;
+    runBtn.textContent = "Run Detection";
+  }
+});
+
+function renderResults(data) {
+  emptyState.style.display     = "none";
+  resultsContent.style.display = "block";
+  errorBox.style.display       = "none";
+
+  // Score
+  const score    = data.score;
+  const thresh   = data.threshold;
+  const anomaly  = data.is_anomaly;
+  const pct      = Math.min(100, (score / (thresh * 2)) * 100);
+
+  scoreNumber.textContent = score.toFixed(4);
+  scoreNumber.className   = `score-number ${anomaly ? "anomaly" : "normal"}`;
+  verdictBadge.textContent = data.verdict;
+  verdictBadge.className  = `verdict-badge ${anomaly ? "anomaly" : "normal"}`;
+  scoreBarFill.style.width      = `${pct.toFixed(1)}%`;
+  scoreBarFill.style.background = anomaly ? "var(--red)" : "var(--green)";
+  thresholdText.textContent     = `threshold: ${thresh.toFixed(4)}`;
+
+  // Images
+  imgOriginal.src = `data:image/jpeg;base64,${data.images.original}`;
+  imgHeatmap.src  = `data:image/jpeg;base64,${data.images.heatmap}`;
+  imgOverlay.src  = `data:image/jpeg;base64,${data.images.overlay}`;
+
+  // Meta pills
+  metaRow.innerHTML = `
+    <div class="meta-pill">Category <strong>${data.category}</strong></div>
+    <div class="meta-pill">Score <strong>${score.toFixed(4)}</strong></div>
+    <div class="meta-pill">Threshold <strong>${thresh.toFixed(4)}</strong></div>
+    <div class="meta-pill">Model <strong>PatchCore</strong></div>
+    <div class="meta-pill">Backbone <strong>EfficientNet-B4</strong></div>
+  `;
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
